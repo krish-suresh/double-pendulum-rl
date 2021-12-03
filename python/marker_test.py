@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 vid = cv2.VideoCapture(0)
 mouseX,mouseY = 0,0
-marker_0 = Marker([90, 90,0],[120, 255,255])
+marker_0 = Marker([80, 150,0],[110, 255,255])
 marker_1 = Marker([15, 60, 100],[30, 255, 255])
 marker_2 = Marker([170, 150, 50],[180, 255, 255], second_low=[0, 150, 50], second_high=[10, 255, 255])
 marker_end = Marker([30, 60, 100],[60, 255, 255])

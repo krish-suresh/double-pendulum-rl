@@ -12,10 +12,10 @@ class Pendulum:
     def __init__(self):
         self.slide_marker = Marker([170, 150, 50],[180, 255, 255], second_low=[0, 150, 50], second_high=[10, 255, 255])
         self.joint_0_marker = Marker([15, 60, 100],[30, 255, 255])
-        self.joint_1_marker = Marker([90, 90,0],[120, 255,255])
+        self.joint_1_marker = Marker([80, 150,0],[110, 255,255])
         self.left_end_marker = Marker([30, 60, 100],[60, 255, 255])
         self.right_end_marker = Marker([30, 60, 100],[60, 255, 255])
-        self.ENDSTOP_THRESH = 0.1
+        self.ENDSTOP_THRESH = 0.3
         self.first_step = True
 
     def update_state(self, image):
@@ -62,19 +62,21 @@ theta_0 = {self.arm_0_theta}
 theta_1 = {self.arm_1_theta}
 x_dot = {self.slide_pos_dot}
 theta_0_dot = {self.arm_0_theta_dot}
-theta_1_dot = {self.arm_0_theta_dot}"""
+theta_1_dot = {self.arm_0_theta_dot}
+is_at_edge = L: {self.is_near_left_end_stop()} R: {self.is_near_right_end_stop()}
+"""
         else:
             return None
     def is_near_left_end_stop(self):
         return  0.5 + self.slide_pos < self.ENDSTOP_THRESH
     def is_near_right_end_stop(self):
         return 0.5 - self.slide_pos < self.ENDSTOP_THRESH
-    def set_motor(self, target_power):
+    def set_motor(self, target_power, limits=True):
         '''target_power: value between -1 and 1'''
         target_power = np.clip(target_power, -1, 1)
-        if self.is_near_left_end_stop():
+        if limits and not self.first_step and self.is_near_left_end_stop():
             target_power = np.clip(target_power, 0, 1)
-        elif self.is_near_right_end_stop:
+        elif limits and not self.first_step and self.is_near_right_end_stop():
             target_power = np.clip(target_power, -1, 0)
-        target_converted = (target_power+1)*2048
+        target_converted = int((target_power+1)*2048)
         jrk2cmd('--target', str(target_converted))
