@@ -16,6 +16,5 @@ while True:
         pendulum.set_motor(-1, limits=False)
     elif key == 115:
         pendulum.set_motor(0, limits=False)
-    # 255 is what the console returns when there is no key press...
     elif key != 255:
         print(key)
