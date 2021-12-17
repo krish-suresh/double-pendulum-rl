@@ -7,7 +7,7 @@ import time
 import gym
 from gym import spaces
 from gym.utils import seeding
-
+import re
 def jrk2cmd(*args):
   return subprocess.check_output(['jrk2cmd'] + list(args))
 def angle_wrap(angle):
@@ -16,36 +16,75 @@ def angle_wrap(angle):
 
 class Pendulum(gym.Env):
     def __init__(self):
-        self.arduino = serial.Serial('/dev/ttyACM0', 9600)
-        self.ENDSTOP_DIST = 120 # mm
-        self.state = None
-        high = np.array([self.ENDSTOP_DIST, math.pi, math.pi], dtype=np.float32)
+        # self.arduino = serial.Serial('/dev/ttyACM3', 115200)
+        self.arduino = serial.Serial()
+        self.arduino.port = "/dev/ttyACM2"
+        self.arduino.baudrate = 9600
+        self.arduino.timeout = 1
+        self.arduino.setDTR(False)
+        #arduinoSerialData.setRTS(False)
+        self.arduino.open()
+        self.ENDSTOP_DIST = 120/1000 # mm
+        self.state = np.zeros(6)
+        high = np.array([self.ENDSTOP_DIST, math.pi, math.pi, 20, 20, 20], dtype=np.float32)
         self.action_space = spaces.Box(
             low=-1, high=1, shape=(1,), dtype=np.float32
         )
         self.observation_space = spaces.Box(low=-high, high=high, dtype=np.float32)
         self.current_action = 0
+        self.arm_0_length = 140/1000 # m
+        self.arm_1_length = 120/1000 # mm
+        self.reward = 0
+        self.dist_penalty = 0
+        self.vel_penalty = 0
 
+        for i in range(50):
+            self.update_state()
+    def update_state(self):
+        try:
+            line = self.arduino.readline()
+            # re.sub('[^0-9].','', x)
+            a = np.array([float(x) for x in line.decode("utf-8", "replace").strip().split(',')])  
+            if len(a) == 6:
+                self.state = a
+        except:
+            print('failed read')
     def step(self, action, check_pos = False):
         # update marker positions
-        line = self.arduino.readline()
-        if line:
-            a = line.decode("utf-8", "ignore").strip().split(',')
-            if len(a) == 6:
-                self.state = [float(x) for x in line.decode("utf-8", "replace").strip().split(',')]
-        # if check_pos:
-        #     if self.current_action != 0 and (self.is_near_left_end_stop() or self.is_near_left_end_stop()):
-        #         self.set_motor(0)
-        # else:
         self.set_motor(action)
-    def reward(self):
-        if not self.state:
-            return 0
-        return self.state # distance calc TODO
+        self.update_state()
+        x, y = self.tip_pos()
+        dist_penalty = math.sqrt(0.01 * x ** 2 + (y) ** 2)*10
+        v1, v2 = self.state[4:]
+        vel_penalty = 8e-3 * v1 ** 2 + 2e-2 * v2 ** 2
+        alive_bonus = 10
+        self.reward = alive_bonus - dist_penalty - vel_penalty
+        self.dist_penalty  = dist_penalty
+        self.vel_penalty = vel_penalty
+        #
+        done = bool(y <= -0.25) or self.is_near_left_end_stop() or self.is_near_right_end_stop()
+        # print(r)
+        # print(self.state)
+        return self.state, self.reward, done, {}
+        # return np.zeros(6), 0, False, {}
     def reset(self):
+        self.set_motor(0)
         input("[ENTER] when reset")
+        for i in range(50):
+            self.update_state()
+        return self.state
+    def tip_pos(self):
+        x = self.state[0]
+        y = -self.arm_0_length-self.arm_1_length
+
+        x+= math.sin(self.state[1]) * self.arm_0_length
+        y+= math.cos(self.state[1]) * self.arm_0_length
+
+        x+= math.sin(self.state[1]-self.state[2]) * self.arm_1_length
+        y+= math.cos(self.state[1]-self.state[2]) * self.arm_1_length
+
+        return x,y
     def formatted_state(self):
-        if self.state:
             return f"""x = {self.state[0]}
 theta_0 = {self.state[1]}
 theta_1 = {self.state[2]}
@@ -53,15 +92,18 @@ x_dot = {self.state[3]}
 theta_0_dot = {self.state[4]}
 theta_1_dot = {self.state[5]}
 is_at_edge = L: {self.is_near_left_end_stop()} R: {self.is_near_right_end_stop()}
-current_power= {self.current_action}
+current_power = {self.current_action}
+reward = {self.reward}
+tip = {self.tip_pos()}
+dist_pen = {self.dist_penalty}
+vel_pen = {self.vel_penalty }
 """
-        else:
-            return None
     def is_near_left_end_stop(self):
-        return self.state and self.state[0] > self.ENDSTOP_DIST
+        return self.state[0] < -self.ENDSTOP_DIST
     def is_near_right_end_stop(self):
-        return self.state and self.state[0] < -self.ENDSTOP_DIST
-
+        return self.state[0] > self.ENDSTOP_DIST
+    def render(self):
+        pass
     def set_motor(self, target_power, limits=True):
         '''target_power: value between -1 and 1'''
         target_power = np.clip(target_power, -1, 1)

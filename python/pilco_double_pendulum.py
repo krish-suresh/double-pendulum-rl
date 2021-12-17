@@ -7,41 +7,9 @@ from pilco.rewards import ExponentialReward
 import tensorflow as tf
 from utils import rollout, policy
 from gpflow import set_trainable
+from arduino_pendulum import Pendulum
+
 np.random.seed(0)
-
-# Introduces a simple wrapper for the gym environment
-# Reduces dimensions, avoids non-smooth parts of the state space that we can't model
-# Uses a different number of timesteps for planning and testing
-# Introduces priors
-
-
-class DoublePendWrapper():
-    def __init__(self):
-        self.env = gym.make('InvertedDoublePendulum-v2').env
-        self.action_space = self.env.action_space
-        self.observation_space = self.env.observation_space
-        print(self.action_space)
-        print(self.observation_space)
-        print("slkfjlsjdf")
-    def state_trans(self, s):
-        a1 = np.arctan2(s[1], s[3])
-        a2 = np.arctan2(s[2], s[4])
-        s_new = np.hstack([s[0], a1, a2, s[5:-3]])
-        return s_new
-
-    def step(self, action):
-        ob, r, done, _ = self.env.step(action)
-        if np.abs(ob[0])> 0.90 or np.abs(ob[-3]) > 0.15 or  np.abs(ob[-2]) > 0.15 or np.abs(ob[-1]) > 0.15:
-            done = True
-        return self.state_trans(ob), r, done, {}
-
-    def reset(self):
-        ob =  self.env.reset()
-        return self.state_trans(ob)
-
-    def render(self):
-        self.env.render()
-
 
 if __name__=='__main__':
     SUBS = 1
@@ -63,7 +31,7 @@ if __name__=='__main__':
     restarts=True
     lens = []
 
-    env = DoublePendWrapper()
+    env = Pendulum()
 
     # Initial random rollouts to generate a dataset
     X, Y, _, _ = rollout(env, None, timesteps=T, random=True, SUBS=SUBS, render=True)
@@ -85,7 +53,9 @@ if __name__=='__main__':
     for model in pilco.mgpr.models:
         model.likelihood.variance.assign(0.001)
         set_trainable(model.likelihood.variance, False)
+    env.set_motor(0) # stop motor
 
+    
     for rollouts in range(N):
         print("**** ITERATION no", rollouts, " ****")
         pilco.optimize_models(maxiter=maxiter, restarts=2)

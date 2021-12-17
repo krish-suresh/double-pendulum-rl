@@ -13,11 +13,12 @@ while True:
     if key == 27:
         quit()
     if key == 97:
-        motor = 0.3
-    elif key == 100:
         motor = -0.3
+    elif key == 100:
+        motor = 0.3
     elif key == 115:
         motor = 0
     elif key != 255:
         print(key)
     pendulum.step(motor)
+    # print(pendulum.tip_pos())

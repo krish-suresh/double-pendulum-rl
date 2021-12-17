@@ -1,32 +1,60 @@
 import numpy as np
+from gpflow import config
+from gym import make
+float_type = config.default_float()
 
-# Code based on: 
-# https://github.com/openai/baselines/blob/master/baselines/deepq/replay_buffer.py
 
-# Expects tuples of (state, next_state, action, reward, done)
-class ReplayBuffer(object):
-	def __init__(self, max_size=1e6):
-		self.storage = []
-		self.max_size = max_size
-		self.ptr = 0
+def rollout(env, pilco, timesteps, verbose=True, random=False, SUBS=1, render=False):
+        X = []; Y = [];
+        x = env.reset()
+        ep_return_full = 0
+        ep_return_sampled = 0
+        for timestep in range(timesteps):
+            if render: env.render()
+            u = policy(env, pilco, x, random)
+            for i in range(SUBS):
+                x_new, r, done, _ = env.step(u)
+                ep_return_full += r
+                if done: 
+                    print('done')
+                    break
+                if render: env.render()
+            if verbose:
+                print("Action: ", u)
+                print("State : ", x_new)
+                print("Return so far: ", ep_return_full)
+            X.append(np.hstack((x, u)))
+            Y.append(x_new - x)
+            ep_return_sampled += r
+            x = x_new
+            if done: break
+        return np.stack(X), np.stack(Y), ep_return_sampled, ep_return_full
 
-	def add(self, data):
-		if len(self.storage) == self.max_size:
-			self.storage[int(self.ptr)] = data
-			self.ptr = (self.ptr + 1) % self.max_size
-		else:
-			self.storage.append(data)
 
-	def sample(self, batch_size):
-		ind = np.random.randint(0, len(self.storage), size=batch_size)
-		x, y, u, r, d = [], [], [], [], []
+def policy(env, pilco, x, random):
+    if random:
+        return env.action_space.sample()
+    else:
+        return pilco.compute_action(x[None, :])[0, :]
 
-		for i in ind: 
-			X, Y, U, R, D = self.storage[i]
-			x.append(np.array(X, copy=False))
-			y.append(np.array(Y, copy=False))
-			u.append(np.array(U, copy=False))
-			r.append(np.array(R, copy=False))
-			d.append(np.array(D, copy=False))
+class Normalised_Env():
+    def __init__(self, env_id, m, std):
+        self.env = make(env_id).env
+        self.action_space = self.env.action_space
+        self.observation_space = self.env.observation_space
+        self.m = m
+        self.std = std
 
-		return np.array(x), np.array(y), np.array(u), np.array(r).reshape(-1, 1), np.array(d).reshape(-1, 1)
+    def state_trans(self, x):
+        return np.divide(x-self.m, self.std)
+
+    def step(self, action):
+        ob, r, done, _ = self.env.step(action)
+        return self.state_trans(ob), r, done, {}
+
+    def reset(self):
+        ob =  self.env.reset()
+        return self.state_trans(ob)
+
+    def render(self):
+        self.env.render()
