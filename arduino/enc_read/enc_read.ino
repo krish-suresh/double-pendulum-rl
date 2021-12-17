@@ -26,7 +26,7 @@ void loop() {
   time_diff = current_time - prev_time;
   slide_pos = slide.read()/464.64 * 40;
   joint_0_pos = angleWrap(M_PI * 2 * joint_0.read() / 2400.0 + M_PI);
-  joint_1_pos = angleWrap(M_PI * 2 * joint_1.read() / 2400.0 + M_PI);
+  joint_1_pos = angleWrap(M_PI * 2 * joint_1.read() / 2400.0);
 
   slide_pos_dot = slide_pos - slide_pos_prev / time_diff;
   joint_0_pos_dot = joint_0_pos - joint_0_pos_prev / time_diff;
