@@ -1,4 +1,4 @@
-from arduino_pendulum import Pendulum
+from arduino_single_pendulum import Pendulum
 import cv2
 
 pendulum = Pendulum()
